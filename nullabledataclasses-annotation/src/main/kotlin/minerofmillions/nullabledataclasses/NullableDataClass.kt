@@ -1,0 +1,3 @@
+package minerofmillions.nullabledataclasses
+
+annotation class NullableDataClass
