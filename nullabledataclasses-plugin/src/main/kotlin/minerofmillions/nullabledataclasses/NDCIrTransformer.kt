@@ -6,7 +6,6 @@ import org.jetbrains.kotlin.backend.common.lower.DeclarationIrBuilder
 import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.builders.*
-import org.jetbrains.kotlin.ir.builders.declarations.addFunction
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrFunction
 import org.jetbrains.kotlin.ir.declarations.IrValueParameter
@@ -52,6 +51,11 @@ class NDCIrTransformer(
 
   private fun irToString(symbol: IrSymbol, klass: IrClass, thisParameter: IrValueParameter?) =
     DeclarationIrBuilder(pluginContext, symbol).irBlockBody {
+      val irConstructor = klass.constructors.firstOrNull() ?: run {
+        +irReturn(irString("No default constructor"))
+        return@irBlockBody
+      }
+
       val irThis = thisParameter?.let(::irGet)
       val irSeparator = irString(", ")
 
@@ -65,8 +69,8 @@ class NDCIrTransformer(
       val concat = irConcat()
       concat.addArgument(irString("${klass.name.asString()}("))
 
-      klass.properties.filter { it.visibility == DescriptorVisibilities.DEFAULT_VISIBILITY }.toList()
-        .mapNotNull { property ->
+      irConstructor.valueParameters.mapNotNull { param -> klass.properties.find { it.name.asString() == param.name.asString() } }
+        .filter { it.visibility == DescriptorVisibilities.DEFAULT_VISIBILITY }.mapNotNull { property ->
           property.getter?.let {
             val value = irCall(it).apply {
               dispatchReceiver = irThis
@@ -74,13 +78,18 @@ class NDCIrTransformer(
             val localConcat = irConcat()
             localConcat.addArgument(irString("${property.name.asString()}="))
             localConcat.addArgument(value)
-            irIfThenElse(context.irBuiltIns.stringType, irEqualsNull(value), irString(""), irIfThenElse(context.irBuiltIns.stringType, irGetHadParameter, irCall(funStringPlus).apply {
-              dispatchReceiver = irSeparator
-              putArgument(this.symbol.owner.valueParameters[0], localConcat)
-            }, irBlock(resultType = context.irBuiltIns.stringType) {
-              +irSet(irHadParameter, irTrue())
-              +localConcat
-            }))
+            irIfThenElse(
+              context.irBuiltIns.stringType,
+              irEqualsNull(value),
+              irString(""),
+              irIfThenElse(context.irBuiltIns.stringType, irGetHadParameter, irCall(funStringPlus).apply {
+                dispatchReceiver = irSeparator
+                putArgument(this.symbol.owner.valueParameters[0], localConcat)
+              }, irBlock(resultType = context.irBuiltIns.stringType) {
+                +irSet(irHadParameter, irTrue())
+                +localConcat
+              })
+            )
           }
         }.forEach(concat::addArgument)
 
