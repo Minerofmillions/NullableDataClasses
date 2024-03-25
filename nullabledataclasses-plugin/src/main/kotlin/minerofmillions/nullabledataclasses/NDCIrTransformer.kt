@@ -26,20 +26,10 @@ class NDCIrTransformer(
   private val annotationClass: IrClassSymbol,
 ) : IrElementTransformerVoidWithContext() {
   override fun visitClassNew(declaration: IrClass): IrStatement {
-    if (declaration.hasAnnotation(annotationClass)) {
-      val currentToString = declaration.functions.find { it.name.asString() == "toString" }
-      if (currentToString == null) {
-        declaration.addFunction {
-          name = Name.identifier("toString")
-          returnType = pluginContext.irBuiltIns.stringType
-        }.also {
-          it.body = irToString(it.symbol, declaration, null)
-        }
-      } else {
-        if (DEBUG) currentToString.transform(TempTransformer(pluginContext), currentToString.dump())
-        else currentToString.transform(this, null)
-      }
-    }
+    if (!declaration.hasAnnotation(annotationClass)) return declaration
+    val currentToString = declaration.functions.find { it.name.asString() == "toString" } ?: return declaration
+    if (DEBUG) currentToString.transform(TempTransformer(pluginContext), currentToString.dump())
+    else currentToString.transform(this, null)
     return declaration
   }
 
